@@ -181,35 +181,75 @@ async function broadcastBalances(io, householdId) {
 }
 
 // Shared balance computation (also used by balanceController)
-// Only unsettled splits contribute to net balances
-async function computeBalances(householdId) {
+// Calculates pairwise balances relative to targetUserId (or overall if targetUserId is omitted)
+// Only unsettled splits contribute to net balances; expenses where target user is not included are skipped.
+async function computeBalances(householdId, targetUserId = null) {
   const expenses = await Expense.find({ householdId })
     .populate('paidBy', 'name email avatarColor')
     .populate('splits.userId', 'name email avatarColor');
 
-  const netMap = {}; // userId -> net balance (positive = owed to them, negative = they owe)
+  const household = await Household.findById(householdId).populate('members.userId', 'name email avatarColor');
+  if (!household) return [];
+
+  const targetStr = targetUserId ? targetUserId.toString() : null;
+  const netMap = {}; // userId -> { userId: UserDoc, net: number }
+
+  if (targetStr) {
+    // Initialize netMap for all members in household except targetUser
+    for (const m of household.members) {
+      if (!m.userId) continue;
+      const uid = m.userId._id.toString();
+      if (uid === targetStr) continue;
+      netMap[uid] = { userId: m.userId, net: 0 };
+    }
+  }
 
   for (const exp of expenses) {
     const payerId = exp.paidBy._id.toString();
-
-    // Only count unsettled splits toward balances
     const unsettledSplits = exp.splits.filter((s) => !s.settled);
-    if (unsettledSplits.length === 0) continue; // entire expense is settled, skip
+    if (unsettledSplits.length === 0) continue; // all settled, skip
 
-    const unsettledTotal = unsettledSplits.reduce((sum, s) => sum + s.amount, 0);
+    if (targetStr) {
+      // Check if target user is included in this expense
+      const isPayer = payerId === targetStr;
+      const targetSplit = unsettledSplits.find(
+        (s) => (s.userId?._id || s.userId).toString() === targetStr
+      );
 
-    if (!netMap[payerId]) netMap[payerId] = { userId: exp.paidBy, net: 0 };
-    netMap[payerId].net += unsettledTotal;
+      if (!isPayer && !targetSplit) {
+        // Target user is NOT included in this expense at all — skip!
+        continue;
+      }
 
-    for (const split of unsettledSplits) {
-      const splitUserId = split.userId._id.toString();
-      if (!netMap[splitUserId]) netMap[splitUserId] = { userId: split.userId, net: 0 };
-      // Don't double-count if the payer is also in their own split
-      if (splitUserId !== payerId) {
-        netMap[splitUserId].net -= split.amount;
-      } else {
-        // Payer's own share is settled against themselves — cancel out
-        netMap[payerId].net -= split.amount;
+      if (isPayer) {
+        // Target user paid: other unsettled members in splits owe target user
+        for (const split of unsettledSplits) {
+          const sUid = (split.userId?._id || split.userId).toString();
+          if (sUid !== targetStr && netMap[sUid]) {
+            netMap[sUid].net += split.amount; // other owes target user
+          }
+        }
+      } else if (targetSplit) {
+        // Someone else paid, target user is in splits: target user owes payer
+        if (netMap[payerId]) {
+          netMap[payerId].net -= targetSplit.amount; // target user owes payer
+        }
+      }
+    } else {
+      // Global calculation fallback
+      const unsettledTotal = unsettledSplits.reduce((sum, s) => sum + s.amount, 0);
+
+      if (!netMap[payerId]) netMap[payerId] = { userId: exp.paidBy, net: 0 };
+      netMap[payerId].net += unsettledTotal;
+
+      for (const split of unsettledSplits) {
+        const splitUserId = (split.userId?._id || split.userId).toString();
+        if (!netMap[splitUserId]) netMap[splitUserId] = { userId: split.userId, net: 0 };
+        if (splitUserId !== payerId) {
+          netMap[splitUserId].net -= split.amount;
+        } else {
+          netMap[payerId].net -= split.amount;
+        }
       }
     }
   }

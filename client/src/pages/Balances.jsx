@@ -22,10 +22,8 @@ export default function Balances() {
     enabled: !!household,
   });
 
-  const myBalance = balances?.find((b) => (b.userId?._id || b.userId) === myId);
-  const myNet = myBalance?.net || 0;
-
   const others = balances?.filter((b) => (b.userId?._id || b.userId) !== myId) || [];
+  const myNet = others.reduce((s, b) => s + (b.net || 0), 0);
 
   // I Owe: net < 0 (they paid, I owe them)
   const iOwe = others.filter((b) => b.net < 0);

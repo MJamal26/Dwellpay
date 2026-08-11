@@ -4,7 +4,7 @@ const Expense = require('../models/Expense');
 // GET /api/balances — Net balance per member
 const getBalances = async (req, res) => {
   try {
-    const balances = await computeBalances(req.user.householdId);
+    const balances = await computeBalances(req.user.householdId, req.user._id);
     res.json(balances);
   } catch (err) {
     res.status(500).json({ message: err.message });
