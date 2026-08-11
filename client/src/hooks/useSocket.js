@@ -17,7 +17,9 @@ export function useSocket() {
 
     // Create singleton socket
     if (!socketInstance) {
-      socketInstance = io('/', {
+      // In dev: '/' works via Vite proxy. In prod: set VITE_SOCKET_URL in Vercel
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || '/';
+      socketInstance = io(socketUrl, {
         auth: { token },
         transports: ['websocket', 'polling'],
         reconnectionAttempts: 5,

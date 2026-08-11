@@ -2,7 +2,9 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 const api = axios.create({
-  baseURL: '/api',
+  // In dev: Vite proxy forwards /api → localhost:5000
+  // In prod: set VITE_API_URL in Vercel env vars to https://your-app.onrender.com/api
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 15000,
 });
 
