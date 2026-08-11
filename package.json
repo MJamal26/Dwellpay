@@ -1,0 +1,13 @@
+{
+  "name": "dwellpay",
+  "version": "1.0.0",
+  "description": "DwellPay — Household & Personal Expense Manager",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}
