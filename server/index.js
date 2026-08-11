@@ -37,6 +37,9 @@ app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', creden
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Root route
+app.get('/', (req, res) => res.json({ message: 'DwellPay API Server is live 🚀', health: '/api/health' }));
+
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', project: 'DwellPay' }));
 
