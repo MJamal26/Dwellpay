@@ -1,12 +1,23 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../api/client';
 import { useAuthStore } from '../store/authStore';
+import { useToastStore } from '../store/toastStore';
 import { formatCurrency, formatDate, CATEGORY_MAP } from '../utils/helpers';
 import MemberAvatar from './MemberAvatar';
 
 export default function ExpenseDetailModal({ expenseId, onClose }) {
-  const { household } = useAuthStore();
+  const { household, user } = useAuthStore();
+  const { addToast } = useToastStore();
+  const queryClient = useQueryClient();
   const currency = household?.currency || 'INR';
+  const [settlingId, setSettlingId] = useState(null); // which split is being toggled
+
+  // Check if current user is owner
+  const myMembership = household?.members?.find(
+    (m) => (m.userId?._id || m.userId) === user?._id
+  );
+  const isOwner = myMembership?.role === 'owner';
 
   const { data: expense, isLoading } = useQuery({
     queryKey: ['expense', expenseId],
@@ -16,10 +27,33 @@ export default function ExpenseDetailModal({ expenseId, onClose }) {
 
   if (!expenseId) return null;
 
-  const cat = expense ? CATEGORY_MAP[expense.category] || { emoji: '📦', label: expense.category } : null;
+  const cat = expense
+    ? CATEGORY_MAP[expense.category] || { emoji: '📦', label: expense.category }
+    : null;
+
+  const handleSettle = async (splitUserId, currentSettled) => {
+    setSettlingId(splitUserId);
+    try {
+      await api.patch(`/expenses/${expenseId}/settle/${splitUserId}`);
+      // Refresh this expense + balances
+      queryClient.invalidateQueries({ queryKey: ['expense', expenseId] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      addToast(
+        currentSettled ? 'Marked as unpaid' : 'Marked as paid ✓',
+        'success'
+      );
+    } catch (err) {
+      addToast(err.response?.data?.message || 'Failed to update', 'error');
+    } finally {
+      setSettlingId(null);
+    }
+  };
+
+  // Check whether payer's own split should show as "paid" automatically
+  const payerId = expense?.paidBy?._id || expense?.paidBy;
 
   return (
-    // Backdrop
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         {/* Close */}
@@ -63,26 +97,65 @@ export default function ExpenseDetailModal({ expenseId, onClose }) {
 
             <div className="modal-divider" />
 
-            {/* Split among */}
+            {/* Splits */}
             <div className="modal-section">
-              <div className="modal-section-label">
-                Split among {expense.splits?.length || 0} member{expense.splits?.length !== 1 ? 's' : ''}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="modal-section-label">
+                  Split among {expense.splits?.length || 0} member{expense.splits?.length !== 1 ? 's' : ''}
+                </div>
+                {isOwner && (
+                  <span style={{ fontSize: 10, color: 'var(--color-outline)', fontStyle: 'italic' }}>
+                    tap ✓ to mark paid
+                  </span>
+                )}
               </div>
+
               <div className="modal-splits-list">
-                {expense.splits?.map((sp) => (
-                  <div key={sp.userId?._id || sp.userId} className="modal-split-row">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                      <MemberAvatar user={sp.userId} size="sm" />
-                      <span className="modal-split-name">{sp.userId?.name || 'Member'}</span>
+                {expense.splits?.map((sp) => {
+                  const spUserId = sp.userId?._id || sp.userId;
+                  const isPayer = spUserId === payerId;
+                  // Payer's split is implicitly settled
+                  const isSettled = sp.settled || isPayer;
+                  const isLoading = settlingId === spUserId;
+
+                  return (
+                    <div key={spUserId} className="modal-split-row">
+                      {/* Left: avatar + name */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <MemberAvatar user={sp.userId} size="sm" />
+                        <div>
+                          <div className="modal-split-name">{sp.userId?.name || 'Member'}</div>
+                          {isPayer && (
+                            <div style={{ fontSize: 10, color: 'var(--color-outline)' }}>paid</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: amount + badge + settle btn */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <span className="modal-split-amount">
+                          {formatCurrency(sp.amount, currency)}
+                        </span>
+
+                        {/* Settle toggle — owner only, not for the payer (already paid) */}
+                        {isOwner && !isPayer ? (
+                          <button
+                            className={`settle-btn${isSettled ? ' settled' : ''}`}
+                            onClick={() => handleSettle(spUserId, sp.settled)}
+                            disabled={isLoading}
+                            title={isSettled ? 'Mark as unpaid' : 'Mark as paid'}
+                          >
+                            {isLoading ? '…' : isSettled ? '✓ Paid' : 'Mark paid'}
+                          </button>
+                        ) : (
+                          <span className={`badge ${isSettled ? 'badge-positive' : 'badge-neutral'}`}>
+                            {isSettled ? 'Paid' : 'Pending'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                      <span className="modal-split-amount">{formatCurrency(sp.amount, currency)}</span>
-                      <span className={`badge ${sp.settled ? 'badge-positive' : 'badge-neutral'}`}>
-                        {sp.settled ? 'Settled' : 'Pending'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

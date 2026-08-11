@@ -1,10 +1,26 @@
 const { computeBalances } = require('./expenseController');
 const Expense = require('../models/Expense');
+const Household = require('../models/Household');
 
 // GET /api/balances — Net balance per member
 const getBalances = async (req, res) => {
   try {
     const balances = await computeBalances(req.user.householdId, req.user._id);
+
+    // If caller is a normal (non-hidden) user, hide balances for ghost admins
+    if (!req.user.isHidden) {
+      const household = await Household.findById(req.user.householdId);
+      const hiddenIds = new Set(
+        household.members
+          .filter((m) => m.hidden)
+          .map((m) => m.userId.toString())
+      );
+      const filtered = balances.filter(
+        (b) => !hiddenIds.has((b.userId?._id || b.userId).toString())
+      );
+      return res.json(filtered);
+    }
+
     res.json(balances);
   } catch (err) {
     res.status(500).json({ message: err.message });

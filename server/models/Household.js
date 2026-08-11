@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const memberSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   role: { type: String, enum: ['owner', 'member'], default: 'member' },
+  hidden: { type: Boolean, default: false }, // ghost admin — invisible to regular members
   joinedAt: { type: Date, default: Date.now },
 });
 

@@ -274,4 +274,49 @@ const getExpenseById = async (req, res) => {
   }
 };
 
-module.exports = { getExpenses, getExpenseById, addExpense, updateExpense, deleteExpense, computeBalances };
+// PATCH /api/expenses/:id/settle/:splitUserId
+// Toggle settled status on a specific member's split — owner only
+const settleSplit = async (req, res) => {
+  try {
+    const expense = await Expense.findById(req.params.id);
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    if (expense.householdId.toString() !== req.user.householdId.toString())
+      return res.status(403).json({ message: 'Not authorized' });
+
+    // Only household owner can mark splits as settled
+    const household = await Household.findById(req.user.householdId);
+    const myMember = household.members.find(
+      (m) => m.userId.toString() === req.user._id.toString()
+    );
+    if (!myMember || myMember.role !== 'owner') {
+      return res.status(403).json({ message: 'Only the household owner can mark splits as paid' });
+    }
+
+    // Find the specific split
+    const split = expense.splits.find(
+      (s) => s.userId.toString() === req.params.splitUserId
+    );
+    if (!split) return res.status(404).json({ message: 'Split not found for this member' });
+
+    // Toggle
+    split.settled = !split.settled;
+    await expense.save();
+
+    const populated = await Expense.findById(expense._id)
+      .populate('paidBy', 'name email avatarColor')
+      .populate('splits.userId', 'name email avatarColor');
+
+    // Broadcast updated balances
+    const io = req.app.get('io');
+    if (io) {
+      io.to(req.user.householdId.toString()).emit('expense:updated', { expense: populated });
+      broadcastBalances(io, req.user.householdId.toString());
+    }
+
+    res.json(populated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getExpenses, getExpenseById, addExpense, updateExpense, deleteExpense, settleSplit, computeBalances };

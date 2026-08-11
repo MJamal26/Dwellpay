@@ -47,7 +47,13 @@ const getHousehold = async (req, res) => {
     const isMember = household.members.some((m) => m.userId._id.toString() === req.user._id.toString());
     if (!isMember) return res.status(403).json({ message: 'Not a member of this household' });
 
-    res.json(household);
+    // Ghost admins see everyone; regular members don't see hidden admins
+    const visibleHousehold = household.toObject();
+    if (!req.user.isHidden) {
+      visibleHousehold.members = visibleHousehold.members.filter((m) => !m.hidden);
+    }
+
+    res.json(visibleHousehold);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
