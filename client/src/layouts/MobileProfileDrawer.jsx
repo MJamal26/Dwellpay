@@ -1,13 +1,52 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { disconnectSocket } from '../hooks/useSocket';
 import MemberAvatar from '../components/MemberAvatar';
 import { useTheme } from '../hooks/useTheme';
+import {
+  checkPushSupported,
+  getPushSubscription,
+  subscribeUserToPush,
+  unsubscribeUserFromPush,
+} from '../utils/pushManager';
 
 export default function MobileProfileDrawer({ isOpen, onClose }) {
   const { user, household, logout } = useAuthStore();
   const navigate = useNavigate();
   const { isDark, toggle: toggleTheme } = useTheme();
+
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const supported = await checkPushSupported();
+      setPushSupported(supported);
+      if (supported) {
+        const sub = await getPushSubscription();
+        setPushSubscribed(!!sub);
+      }
+    })();
+  }, [isOpen]);
+
+  const handlePushToggle = async () => {
+    setPushLoading(true);
+    try {
+      if (pushSubscribed) {
+        await unsubscribeUserFromPush();
+        setPushSubscribed(false);
+      } else {
+        await subscribeUserToPush();
+        setPushSubscribed(true);
+      }
+    } catch (err) {
+      console.error(err.message);
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const isOwner = household?.members?.find(
     (m) => (m.userId?._id || m.userId) === user?._id
@@ -127,7 +166,7 @@ export default function MobileProfileDrawer({ isOpen, onClose }) {
           ))}
         </div>
 
-        {/* Footer: theme toggle + logout */}
+        {/* Footer: push toggle + theme toggle + logout */}
         <div style={{
           padding: 'var(--space-4)',
           paddingBottom: 'calc(var(--space-4) + env(safe-area-inset-bottom, 0px))',
@@ -136,6 +175,49 @@ export default function MobileProfileDrawer({ isOpen, onClose }) {
           flexDirection: 'column',
           gap: 'var(--space-3)',
         }}>
+          {/* Push notification toggle */}
+          {pushSupported && (
+            <button
+              onClick={handlePushToggle}
+              disabled={pushLoading}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: 'var(--space-3) var(--space-4)',
+                background: 'var(--color-surface-container-low)',
+                border: '1px solid var(--color-outline-variant)',
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--text-body-md)', fontWeight: 600,
+                color: 'var(--color-on-surface)',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                <span style={{ fontSize: 20 }}>{pushSubscribed ? '🔔' : '🔕'}</span>
+                {pushSubscribed ? 'Notifications On' : 'Enable Notifications'}
+              </span>
+              <span style={{
+                width: 44,
+                height: 24,
+                borderRadius: 'var(--radius-full)',
+                background: pushSubscribed ? 'var(--color-primary)' : 'var(--color-surface-container-high)',
+                position: 'relative',
+                transition: 'background var(--duration-normal)',
+                flexShrink: 0,
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  top: 3,
+                  left: pushSubscribed ? 23 : 3,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  transition: 'left var(--duration-normal)',
+                }} />
+              </span>
+            </button>
+          )}
+
           {/* Theme toggle row */}
           <button
             onClick={toggleTheme}

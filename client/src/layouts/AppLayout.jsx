@@ -4,11 +4,13 @@ import Sidebar from './Sidebar';
 import BottomTabBar from './BottomTabBar';
 import ToastContainer from '../components/ToastContainer';
 import { useSocket } from '../hooks/useSocket';
+import { useAutoPushSubscription } from '../hooks/useAutoPushSubscription';
 import MobileProfileDrawer from './MobileProfileDrawer';
 
 export default function AppLayout() {
-  // Initialize socket connection for entire authenticated app
+  // Initialize socket connection & auto push notification prompt for entire authenticated app
   useSocket();
+  useAutoPushSubscription();
 
   const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
 
