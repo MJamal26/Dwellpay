@@ -1,5 +1,7 @@
 const Expense = require('../models/Expense');
 const Household = require('../models/Household');
+const { sendPushToUsers } = require('../utils/pushNotification');
+
 
 // Helper: compute equal splits for an expense
 const computeEqualSplits = (amount, memberIds) => {
@@ -94,6 +96,17 @@ const addExpense = async (req, res) => {
       // Recompute and broadcast updated balances
       broadcastBalances(io, req.user.householdId.toString());
     }
+
+    // Send push notification to split members
+    const splitUserIds = populated.splits
+      .map((s) => s.userId._id || s.userId)
+      .filter((id) => id.toString() !== req.user._id.toString());
+
+    sendPushToUsers(splitUserIds, {
+      title: 'New Expense Added 💸',
+      body: `${req.user.name || 'Someone'} added "${populated.description}" (${populated.currency === 'USD' ? '$' : '₹'}${populated.amount})`,
+      url: '/expenses',
+    });
 
     res.status(201).json(populated);
   } catch (err) {
@@ -311,6 +324,15 @@ const settleSplit = async (req, res) => {
     if (io) {
       io.to(req.user.householdId.toString()).emit('expense:updated', { expense: populated });
       broadcastBalances(io, req.user.householdId.toString());
+    }
+
+    // Send push notification to the member whose split was toggled
+    if (split.settled && req.params.splitUserId !== req.user._id.toString()) {
+      sendPushToUsers([req.params.splitUserId], {
+        title: 'Payment Marked as Settled ✅',
+        body: `Your share for "${populated.description}" was marked as paid!`,
+        url: '/balances',
+      });
     }
 
     res.json(populated);

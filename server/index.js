@@ -15,6 +15,7 @@ const balanceRoutes = require('./routes/balances');
 const settlementRoutes = require('./routes/settlements');
 const reportRoutes = require('./routes/reports');
 const settingsRoutes = require('./routes/settings');
+const pushRoutes = require('./routes/push');
 
 const app = express();
 const server = http.createServer(app);
@@ -51,6 +52,8 @@ app.use('/api/balances', balanceRoutes);
 app.use('/api/settlements', settlementRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/push', pushRoutes);
+
 
 // Global error handler
 app.use((err, req, res, next) => {
