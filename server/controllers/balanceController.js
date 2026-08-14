@@ -44,18 +44,18 @@ const getBalanceDetail = async (req, res) => {
       .populate('paidBy', 'name email avatarColor')
       .populate('splits.userId', 'name email avatarColor');
 
-    // Net between just these two people — only unsettled splits count
     let net = 0;
     for (const exp of expenses) {
-      const payerId = exp.paidBy._id.toString();
+      if (!exp.paidBy) continue;
+      const payerId = (exp.paidBy._id || exp.paidBy).toString();
       if (payerId === myId) {
         const otherSplit = exp.splits.find(
-          (s) => s.userId._id.toString() === otherId && !s.settled
+          (s) => s.userId && (s.userId._id || s.userId).toString() === otherId && !s.settled
         );
         if (otherSplit) net += otherSplit.amount; // other owes me (unsettled)
       } else {
         const mySplit = exp.splits.find(
-          (s) => s.userId._id.toString() === myId && !s.settled
+          (s) => s.userId && (s.userId._id || s.userId).toString() === myId && !s.settled
         );
         if (mySplit) net -= mySplit.amount; // I owe other (unsettled)
       }

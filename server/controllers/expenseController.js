@@ -59,9 +59,7 @@ const addExpense = async (req, res) => {
       return res.status(400).json({ message: 'description, amount, and paidBy are required' });
 
     const household = await Household.findById(req.user.householdId).populate('members.userId', 'name');
-    if (!household) return res.status(404).json({ message: 'Household not found' });
-
-    const memberIds = household.members.map((m) => m.userId._id);
+    const memberIds = household.members.map((m) => m.userId?._id || m.userId).filter(Boolean);
 
     let finalSplits;
     if (splits && splits.length > 0) {
@@ -211,14 +209,15 @@ async function computeBalances(householdId, targetUserId = null) {
     // Initialize netMap for all members in household except targetUser
     for (const m of household.members) {
       if (!m.userId) continue;
-      const uid = m.userId._id.toString();
+      const uid = (m.userId._id || m.userId).toString();
       if (uid === targetStr) continue;
       netMap[uid] = { userId: m.userId, net: 0 };
     }
   }
 
   for (const exp of expenses) {
-    const payerId = exp.paidBy._id.toString();
+    if (!exp.paidBy) continue;
+    const payerId = (exp.paidBy._id || exp.paidBy).toString();
     const unsettledSplits = exp.splits.filter((s) => !s.settled);
     if (unsettledSplits.length === 0) continue; // all settled, skip
 

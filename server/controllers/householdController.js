@@ -42,16 +42,19 @@ const getHousehold = async (req, res) => {
       'members.userId',
       'name email avatarColor'
     );
-    if (!household) return res.status(404).json({ message: 'Household not found' });
-
-    const isMember = household.members.some((m) => m.userId._id.toString() === req.user._id.toString());
+    const isMember = household.members.some((m) => {
+      const mUid = m.userId?._id || m.userId;
+      return mUid && mUid.toString() === req.user._id.toString();
+    });
     if (!isMember) return res.status(403).json({ message: 'Not a member of this household' });
 
     // Ghost admins see everyone; regular members don't see hidden admins
     const visibleHousehold = household.toObject();
-    if (!req.user.isHidden) {
-      visibleHousehold.members = visibleHousehold.members.filter((m) => !m.hidden);
-    }
+    visibleHousehold.members = visibleHousehold.members.filter((m) => {
+      if (!m.userId) return false;
+      if (!req.user.isHidden && m.hidden) return false;
+      return true;
+    });
 
     res.json(visibleHousehold);
   } catch (err) {

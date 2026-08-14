@@ -16,15 +16,18 @@ const getHouseholdForUser = async (userId, householdId) => {
     'members.userId', 'name email avatarColor'
   );
   if (!household) return null;
-  const myMembership = household.members.find(
-    (m) => m.userId._id.toString() === userId.toString()
-  );
+  const myMembership = household.members.find((m) => {
+    const mUid = m.userId?._id || m.userId;
+    return mUid && mUid.toString() === userId.toString();
+  });
   const isHidden = !!(myMembership?.hidden);
   const hObj = household.toObject();
-  // Regular users don't see hidden members
-  if (!isHidden) {
-    hObj.members = hObj.members.filter((m) => !m.hidden);
-  }
+  // Filter out null users or hidden members (for non-admins)
+  hObj.members = hObj.members.filter((m) => {
+    if (!m.userId) return false;
+    if (!isHidden && m.hidden) return false;
+    return true;
+  });
   return { household: hObj, isHidden };
 };
 
