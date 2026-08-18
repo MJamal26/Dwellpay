@@ -295,13 +295,19 @@ const settleSplit = async (req, res) => {
     if (expense.householdId.toString() !== req.user.householdId.toString())
       return res.status(403).json({ message: 'Not authorized' });
 
-    // Only household owner can mark splits as settled
-    const household = await Household.findById(req.user.householdId);
-    const myMember = household.members.find(
-      (m) => m.userId.toString() === req.user._id.toString()
-    );
-    if (!myMember || myMember.role !== 'owner') {
-      return res.status(403).json({ message: 'Only the household owner can mark splits as paid' });
+    // Allow: household owner (admin) OR the person who paid for this expense
+    const expensePayer = (expense.paidBy?._id || expense.paidBy)?.toString();
+    const isExpensePayer = expensePayer === req.user._id.toString();
+
+    if (!isExpensePayer) {
+      // Not the payer — check if household owner
+      const household = await Household.findById(req.user.householdId);
+      const myMember = household?.members.find(
+        (m) => (m.userId?._id || m.userId)?.toString() === req.user._id.toString()
+      );
+      if (!myMember || myMember.role !== 'owner') {
+        return res.status(403).json({ message: 'Only the expense creator or household owner can mark splits as paid' });
+      }
     }
 
     // Find the specific split

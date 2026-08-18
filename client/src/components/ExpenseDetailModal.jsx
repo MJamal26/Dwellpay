@@ -53,6 +53,10 @@ export default function ExpenseDetailModal({ expenseId, onClose }) {
   // Check whether payer's own split should show as "paid" automatically
   const payerId = expense?.paidBy?._id || expense?.paidBy;
 
+  // Can settle: household owner (admin) OR whoever paid for this expense
+  const isExpensePayer = expense ? (payerId === user?._id) : false;
+  const canSettle = isOwner || isExpensePayer;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -103,7 +107,7 @@ export default function ExpenseDetailModal({ expenseId, onClose }) {
                 <div className="modal-section-label">
                   Split among {expense.splits?.length || 0} member{expense.splits?.length !== 1 ? 's' : ''}
                 </div>
-                {isOwner && (
+                {canSettle && (
                   <span style={{ fontSize: 10, color: 'var(--color-outline)', fontStyle: 'italic' }}>
                     tap ✓ to mark paid
                   </span>
@@ -137,8 +141,8 @@ export default function ExpenseDetailModal({ expenseId, onClose }) {
                           {formatCurrency(sp.amount, currency)}
                         </span>
 
-                        {/* Settle toggle — owner only, not for the payer (already paid) */}
-                        {isOwner && !isPayer ? (
+                        {/* Settle toggle — expense creator or owner, not for the payer row (already paid) */}
+                        {canSettle && !isPayer ? (
                           <button
                             className={`settle-btn${isSettled ? ' settled' : ''}`}
                             onClick={() => handleSettle(spUserId, sp.settled)}
